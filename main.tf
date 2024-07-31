@@ -1,83 +1,42 @@
-terraform {
-  required_providers {
-    vsphere = {
-      source  = "hashicorp/vsphere"
-      version = "2.0.0"
-    }
-  }
-}
-
 provider "vsphere" {
-  user                 = var.vsphere_user
-  password             = var.vsphere_password
-  vsphere_server       = var.vsphere_server
+  user           = var.vsphere_user
+  password       = var.vsphere_password
+  vsphere_server = var.vsphere_server
+
+  # If you have a self-signed cert
   allow_unverified_ssl = true
 }
 
-data "vsphere_datacenter" "dc" {
-  name = var.vsphere_datacenter
-}
+resource vsphere_virtual_machine "this" { 
+  name             = var.hostname
+  resource_pool_id = data.vsphere_compute_cluster.this.resource_pool_id
+  datastore_id     = data.vsphere_datastore.this.id
 
-data "vsphere_datastore" "datastore" {
-  name          = var.vsphere_datastore
-  datacenter_id = data.vsphere_datacenter.dc.id
-}
+  num_cpus = 2
+  memory   = 2048
+  guest_id = data.vsphere_virtual_machine.template.guest_id
 
-data "vsphere_compute_cluster" "cluster" {
-  name          = var.vsphere_cluster
-  datacenter_id = data.vsphere_datacenter.dc.id
-}
-
-data "vsphere_network" "network" {
-  for_each      = var.vm_settings
-  name          = each.value.netportgroup
-  datacenter_id = data.vsphere_datacenter.dc.id
-}
-
-data "vsphere_virtual_machine" "template" {
-  name          = var.vsphere_template_name
-  datacenter_id = data.vsphere_datacenter.dc.id
-}
-
-data "template_file" "userdata" {
-  for_each = var.vm_settings
-  template = file("${path.module}/templates/userdata.yaml")
-  vars = {
-    username       = each.value.user
-    ssh_public_key = each.value.sshkey
-    ip_address     = each.value.ip
-    netmask        = each.value.subnet
-    nameservers    = jsonencode(each.value.nameservers)
-    gateway        = each.value.gw
-  }
-}
-resource "vsphere_virtual_machine" "vms" {
-  for_each         = var.vm_settings
-  name             = each.key
-  annotation       = "Deployed with Terraform"
-#  folder           = each.value.folder
-  resource_pool_id = data.vsphere_compute_cluster.cluster.resource_pool_id
-  datastore_id     = data.vsphere_datastore.datastore.id
-  num_cpus         = each.value.cpus
-  memory           = each.value.memory
-  guest_id         = data.vsphere_virtual_machine.template.guest_id
-  scsi_type        = data.vsphere_virtual_machine.template.scsi_type
   network_interface {
-    network_id   = data.vsphere_network.network[each.key].id
+    network_id   = data.vsphere_network.this.id
     adapter_type = data.vsphere_virtual_machine.template.network_interface_types[0]
-
   }
-  cdrom {
-    client_device = true
-  }
+  wait_for_guest_net_timeout = 0
 
   disk {
     label            = "disk0"
-    size             = each.value.disk
-    thin_provisioned = each.value.thin
+    size             = data.vsphere_virtual_machine.template.disks.0.size
+    eagerly_scrub    = data.vsphere_virtual_machine.template.disks.0.eagerly_scrub
+    thin_provisioned = data.vsphere_virtual_machine.template.disks.0.thin_provisioned
   }
+
   clone {
     template_uuid = data.vsphere_virtual_machine.template.id
+  }
 
+  extra_config = {
+    "guestinfo.metadata"          = base64encode(file("${path.module}/templates/metadata.yaml"))
+    "guestinfo.metadata.encoding" = "base64"
+    "guestinfo.userdata"          = base64encode(file("${path.module}/templates/userdata.yaml"))
+    "guestinfo.userdata.encoding" = "base64"
   }
 }
