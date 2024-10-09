@@ -1,4 +1,4 @@
-provider "vsphere" {
+  provider "vsphere" {
   user           = var.vsphere_user
   password       = var.vsphere_password
   vsphere_server = var.vsphere_server
@@ -12,8 +12,8 @@ resource vsphere_virtual_machine "this" {
   resource_pool_id = data.vsphere_compute_cluster.this.resource_pool_id
   datastore_id     = data.vsphere_datastore.this.id
 
-  num_cpus = 2
-  memory   = 2048
+  num_cpus = var.num_cpu
+  memory   = var.num_memory
   guest_id = data.vsphere_virtual_machine.template.guest_id
 
   network_interface {
