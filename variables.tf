@@ -6,6 +6,12 @@
 variable "vsphere_server" {
   type = string
 }
+variable "num_cpu" {
+  type = string
+}
+variable "num_memory" {
+  type = string
+}
 
 variable "vsphere_user" {
   type = string
